@@ -154,11 +154,11 @@
     <div class="card">
         <h2 style="margin-top:0; font-size:16px; color:#831843;">🤖 Gemini AI 학습 플래너</h2>
         
-        <!-- API 키 안전 입력 상자 -->
+        <!-- API 키 입력 상자 -->
         <div class="key-input-box">
             <div class="input-group" style="margin-bottom:0;">
                 <label style="color:#be185d;">🔑 Gemini API Key 설정 (최초 1회 설정)</label>
-                <input type="password" id="userApiKey" placeholder="AIzaSy... 로 시작하는 키 입력" style="margin-top:4px;" onchange="saveKeyToStorage()">
+                <input type="password" id="userApiKey" placeholder="발급받으신 API Key 입력 (AQ...)" style="margin-top:4px;" onchange="saveKeyToStorage()">
                 <div style="font-size:10px; color:#9d174d; margin-top:4px;">* 키는 서버에 저장되지 않고 사용자 기기에만 안전하게 보관됩니다.</div>
             </div>
         </div>
@@ -443,12 +443,6 @@
             return;
         }
 
-        if (key.startsWith("AQ")) {
-            resDiv.style.display = 'block';
-            resDiv.innerHTML = `<div class="error-box"><b>⚠️ 입력하신 키가 AQ...로 시작합니다.</b><br>AI Studio에서 <b>AIzaSy...</b>로 시작하는 무료 API 키를 발급받아 입력해주세요!</div>`;
-            return;
-        }
-
         const subName = document.getElementById('aiSubName').value.trim();
         const importance = document.getElementById('aiImportance').value;
         const startDateStr = document.getElementById('aiStartDate').value;
@@ -584,7 +578,7 @@
             <div class="error-box">
                 <b>⚠️ Gemini AI 호출 에러</b><br>
                 ${error.message}<br><br>
-                <b>해결법:</b> <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#b91c1c; font-weight:bold;">Google AI Studio</a>에서 <b>AIzaSy...</b>로 시작하는 새 키를 발급받아 상단 상자에 넣어주세요.
+                입력하신 API 키가 정확한지 다시 한번 확인해 주세요.
             </div>`;
             applyBtn.style.display = 'none';
         } finally {
