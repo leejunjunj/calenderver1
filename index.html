@@ -58,9 +58,12 @@
         .timeline-item { background: #fff1f2; border-left: 4px solid var(--pink); padding: 8px; border-radius: 0 8px 8px 0; margin-bottom: 6px; font-size: 12px; }
         .subject-card { background: #fff1f2; padding: 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #fce7f3; }
         #aiResult { margin-top: 10px; background: #fff1f2; padding: 12px; border-radius: 8px; font-size: 12px; border: 1px solid #fbcfe8; line-height: 1.5; display: none; }
-        .ai-plan-item { background: white; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--purple); }
         
-        .status-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #e2e8f0; color: #475569; font-weight: normal; margin-left: 4px; }
+        .ai-plan-card { background: white; padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid var(--purple); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .ai-plan-phase { font-size: 10px; font-weight: bold; color: var(--purple); background: #f3e8ff; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
+        .ai-subtask-list { margin: 4px 0 0 0; padding-left: 16px; font-size: 11px; color: #475569; }
+        
+        .error-box { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; padding: 10px; border-radius: 8px; font-size: 12px; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -129,28 +132,27 @@
         </div>
     </div>
 
-    <!-- AI 학습 플래너 카드 -->
+    <!-- AI 심화 학습 스케줄러 카드 -->
     <div class="card">
-        <h2 style="margin-top:0; font-size:16px; color:#831843;">🤖 AI 맞춤 학습 스케줄러</h2>
+        <h2 style="margin-top:0; font-size:16px; color:#831843;">🤖 Gemini AI 정밀 학습 심화 스케줄러</h2>
         
         <div class="input-group">
-            <label>API Key 설정 <span class="status-tag">보안 통합 적용됨</span></label>
+            <label>인증 키 (Key / Token)</label>
             <input type="text" id="userApiKey" value="AQ.Ab8RN6IIC9fJyvtmE3x2CI2bA7maOQSYyjtou1CWt-CxHVupxw">
         </div>
 
         <div class="subject-card">
             <div class="input-group">
-                <label>과목명 / 시험 범위</label>
-                <input type="text" id="aiSubName" placeholder="예: 식품 화학 1~5장">
+                <label>과목명 및 세부 범위</label>
+                <input type="text" id="aiSubName" placeholder="예: 식품 화학 (지질/단백질/효소 반응 1~5장)">
             </div>
             <div class="row">
                 <div class="input-group" style="flex:1;">
-                    <label>난이도</label>
+                    <label>난이도 및 목표</label>
                     <select id="aiSubDifficulty">
-                        <option value="쉬움">쉬움 (개념 위주)</option>
-                        <option value="보통" selected>보통 (일반 시험)</option>
-                        <option value="어려움">어려움 (암기+공식)</option>
-                        <option value="최상">최상 (시험 전 극강 집중)</option>
+                        <option value="상 (개념 파악부터 고급 계산까지)">상 (개념+계산+응용)</option>
+                        <option value="중 (일반 시험 대비)" selected>중 (이론 정독+문제)</option>
+                        <option value="하 (벼락치기 및 요약)">하 (핵심 암기 위주)</option>
                     </select>
                 </div>
                 <div class="input-group" style="flex:1;">
@@ -160,8 +162,8 @@
             </div>
             <div class="row">
                 <div class="input-group" style="flex:1;">
-                    <label>하루 공부 시간</label>
-                    <input type="text" id="aiSubHours" placeholder="예: 하루 2시간">
+                    <label>하루 목표 공부 시간</label>
+                    <input type="text" id="aiSubHours" placeholder="예: 3시간">
                 </div>
                 <div class="input-group" style="flex:1;">
                     <label>시작일</label>
@@ -170,10 +172,10 @@
             </div>
         </div>
 
-        <button class="btn" id="aiGenBtn" onclick="generateAiSchedule()">✨ AI 스케줄 생성하기</button>
+        <button class="btn" id="aiGenBtn" onclick="generateAiSchedule()">✨ Gemini AI 맞춤 플랜 심화 분석</button>
 
         <div id="aiResult"></div>
-        <button class="btn btn-green" id="applyAiBtn" style="display:none; margin-top:8px;" onclick="applyAiToCalendar()">📅 이 스케줄 그대로 캘린더에 적용하기</button>
+        <button class="btn btn-green" id="applyAiBtn" style="display:none; margin-top:8px;" onclick="applyAiToCalendar()">📅 이 심화 플랜 캘린더에 전체 반영하기</button>
     </div>
 
 </div>
@@ -336,115 +338,134 @@
         alert("일정이 추가되었습니다!");
     }
 
-    // AI 학습 스케줄 생성 함수 (CORS 및 외부 API 차단 대비 로컬 AI 엔진 탑재)
     async function generateAiSchedule() {
+        const apiKey = document.getElementById('userApiKey').value.trim();
         const subName = document.getElementById('aiSubName').value.trim();
         const difficulty = document.getElementById('aiSubDifficulty').value;
-        const days = parseInt(document.getElementById('aiSubDays').value) || 3;
-        const hours = document.getElementById('aiSubHours').value || "2시간";
+        const days = parseInt(document.getElementById('aiSubDays').value) || 5;
+        const hours = document.getElementById('aiSubHours').value || "3시간";
         const startDateStr = document.getElementById('aiStartDate').value || formatDate(new Date());
-        const apiKey = document.getElementById('userApiKey').value.trim();
-
-        if (!subName) {
-            alert("과목명/시험 범위를 입력해주세요!");
-            return;
-        }
 
         const btn = document.getElementById('aiGenBtn');
         const resDiv = document.getElementById('aiResult');
         const applyBtn = document.getElementById('applyAiBtn');
 
+        if (!apiKey) {
+            alert("키를 입력해주세요!");
+            return;
+        }
+        if (!subName) {
+            alert("과목명 및 세부 범위를 입력해주세요!");
+            return;
+        }
+
         btn.disabled = true;
-        btn.innerText = "🧠 AI 분석 및 스케줄링 중...";
+        btn.innerText = "🧠 Gemini AI 분석 중...";
         resDiv.style.display = 'block';
-        resDiv.innerText = "AI가 과목 난이도와 학습 범위를 분석하고 있습니다...";
+        resDiv.innerHTML = "구글 AI 서버 연결 중...";
 
-        let planList = null;
+        const promptText = `
+너는 최고의 대학 학습 전략가이자 플래너야.
+아래 조건에 따라 ${days}일간의 체계적인 심화 공부 계획을 생성해줘.
 
-        // 1차 시도: 원격 서버 호출
+[학습 정보]
+- 과목 및 범위: ${subName}
+- 난이도 및 목표: ${difficulty}
+- 남은 기간: ${days}일 (시작일: ${startDateStr})
+- 하루 투자 시간: ${hours}
+
+[필수 구조화 규칙]
+- 시작일(${startDateStr})부터 ${days}일 동안 날짜가 하루씩 증가하도록 일수를 지정해줘.
+- 각 날짜별로 3개 이상의 상세 세부 실행 과제(subtasks)와 효율적인 학습 기법(studyMethod)을 작성해.
+- 반드시 아래 JSON 구조 규칙을 지켜서 JSON 배열로만 출력해.
+
+[응답 JSON 배열 형식]
+[
+  {
+    "date": "YYYY-MM-DD",
+    "dayNum": 1,
+    "phase": "1단계: 개념 파악 및 기본 구조화",
+    "title": "지질 및 단백질 구조 핵심 개념 정리",
+    "subtasks": [
+      "기본 서적 1~2장 핵심 용어 암기 노트 작성",
+      "주요 반응식 및 구조식 3회 백지 작성 연습",
+      "연습문제 10문항 풀이 및 핵심 개념 체크"
+    ],
+    "studyMethod": "뽀모도로 기법 (25분 집중 + 5분 휴식)",
+    "category": "bg-navy"
+  }
+]
+`;
+
+        // AQ. 토큰 규격을 위해 Header Authorization과 Query Key 방식 동시 지원
+        const requestHeaders = { 'Content-Type': 'application/json' };
+        if (apiKey.startsWith("AQ") || apiKey.startsWith("ya29")) {
+            requestHeaders['Authorization'] = `Bearer ${apiKey}`;
+        }
+
         try {
-            const prompt = `
-            과목: ${subName}, 난이도: ${difficulty}, 기간: ${days}일(시작일:${startDateStr}), daily:${hours}.
-            이 정보로 ${days}일간의 스케줄을 JSON 배열로만 작성해줘.
-            예시: [{"date":"YYYY-MM-DD", "dayNum":1, "title":"[과목] 1장 개념정리", "detail":"핵심 용어 암기 (${hours})", "category":"bg-navy"}]
-            `;
-
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                mode: 'cors',
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                headers: requestHeaders,
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: promptText }] }],
+                    generationConfig: { response_mime_type: "application/json" }
+                })
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                let responseText = data.candidates[0].content.parts[0].text;
-                responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-                planList = JSON.parse(responseText);
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(`[응답 오류 ${response.status}] ${errData.error?.message || '인증 키 확인이 필요합니다.'}`);
             }
-        } catch (e) {
-            console.log("CORS 또는 네트워크 보안 제한으로 로컬 AI 스마트 스케줄러 엔진으로 자동 전환합니다.");
-        }
 
-        // 2차 시도 (CORS/보안 이슈 발생 시 100% 보장하는 로컬 AI 정밀 알고리즘)
-        if (!planList || !Array.isArray(planList)) {
-            planList = buildLocalAiSchedule(subName, difficulty, days, hours, startDateStr);
-        }
+            const data = await response.json();
+            const rawText = data.candidates[0].content.parts[0].text;
+            const planList = JSON.parse(rawText);
 
-        // 결과 화면 출력
-        aiGeneratedEvents = [];
-        let html = `<strong>🤖 AI 완성 [${subName}] ${days}일 플랜:</strong><br><br>`;
+            aiGeneratedEvents = [];
+            let html = `<div style="margin-bottom:10px;"><strong>🤖 Gemini AI 맞춤 심화 플랜 [${subName}]</strong></div>`;
 
-        planList.forEach(item => {
-            html += `
-            <div class="ai-plan-item">
-                <strong>${item.date} (Day ${item.dayNum})</strong><br>
-                🎯 <b>${item.title}</b><br>
-                <span style="color:#64748b; font-size:11px;">${item.detail}</span>
+            planList.forEach(item => {
+                let subtasksHtml = (item.subtasks || []).map(task => `<li>${task}</li>`).join('');
+                
+                html += `
+                <div class="ai-plan-card">
+                    <span class="ai-plan-phase">${item.phase || '학습 단계'}</span>
+                    <div style="font-size:13px; font-weight:bold; color:#1e293b; margin:2px 0;">
+                        ${item.date} (Day ${item.dayNum}) - ${item.title}
+                    </div>
+                    <ul class="ai-subtask-list">
+                        ${subtasksHtml}
+                    </ul>
+                    <div style="font-size:10px; color:#a855f7; margin-top:4px; font-weight:600;">
+                        💡 추천 기법: ${item.studyMethod || '자율 학습'}
+                    </div>
+                </div>`;
+
+                aiGeneratedEvents.push({
+                    title: `[AI] ${item.title}`,
+                    start: item.date,
+                    end: item.date,
+                    time: "10:00",
+                    category: item.category || "bg-navy"
+                });
+            });
+
+            resDiv.innerHTML = html;
+            applyBtn.style.display = 'block';
+
+        } catch (error) {
+            console.error(error);
+            resDiv.innerHTML = `
+            <div class="error-box">
+                <b>⚠️ AI 플랜 생성 에러 진단</b><br>
+                ${error.message}
             </div>`;
-
-            aiGeneratedEvents.push({
-                title: item.title,
-                start: item.date,
-                end: item.date,
-                time: "10:00",
-                category: item.category || "bg-navy"
-            });
-        });
-
-        resDiv.innerHTML = html;
-        applyBtn.style.display = 'block';
-        btn.disabled = false;
-        btn.innerText = "✨ AI 스케줄 생성하기";
-    }
-
-    // 로컬 스마트 스케줄링 알고리즘 (CORS 및 브라우저 차단 완벽 방어)
-    function buildLocalAiSchedule(subName, difficulty, days, hours, startDateStr) {
-        let list = [];
-        let curDate = new Date(startDateStr);
-
-        let stages = ["개념 파악 및 기본 이론 정리", "핵심 단원 정독 및 암기", "심화 문제 풀이 및 오답 분석", "전범위 종합 복습 및 최종 점검"];
-
-        for (let i = 0; i < days; i++) {
-            let dStr = formatDate(curDate);
-            let dayNum = i + 1;
-            let stageIdx = Math.floor((i / days) * stages.length);
-            let currentStage = stages[Math.min(stageIdx, stages.length - 1)];
-
-            let title = `[${subName}] Day ${dayNum}: ${currentStage}`;
-            let detail = `${difficulty} 난이도 맞춤 과정 | 하루 목표: ${hours} 집중 학습`;
-
-            list.push({
-                date: dStr,
-                dayNum: dayNum,
-                title: title,
-                detail: detail,
-                category: "bg-navy"
-            });
-
-            curDate.setDate(curDate.getDate() + 1);
+            applyBtn.style.display = 'none';
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "✨ Gemini AI 맞춤 플랜 심화 분석";
         }
-        return list;
     }
 
     function applyAiToCalendar() {
@@ -454,7 +475,7 @@
         renderCalendar(currentYear, currentMonth);
         if(selectedDateStr) selectDate(selectedDateStr);
 
-        alert(`🎉 총 ${aiGeneratedEvents.length}일간의 AI 학습 스케줄이 캘린더에 성공적으로 등록되었습니다!`);
+        alert(`🎉 총 ${aiGeneratedEvents.length}일간의 스케줄이 캘린더에 성공적으로 적용되었습니다!`);
         document.getElementById('aiResult').style.display = 'none';
         document.getElementById('applyAiBtn').style.display = 'none';
     }
