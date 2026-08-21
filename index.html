@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마이 스마트 캘린더</title>
+    <style>
+        :root { --red: #ef4444; --blue: #3b82f6; --bg: #f8fafc; }
+        body { font-family: sans-serif; background: var(--bg); padding: 15px; }
+        .card { background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        /* 1. 이벤트 한 줄 연결 */
+        .event-bar { height: 12px; border-radius: 6px; margin: 4px 0; width: 100%; }
+        textarea { width: 100%; height: 120px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; padding: 10px; }
+        button { background: var(--blue); color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; }
+        #result { margin-top: 15px; padding: 10px; border-top: 1px solid #eee; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>📅 스케줄 및 가계부</h2>
+        <div class="event-bar" style="background: var(--red);"></div>
+        <div class="event-bar" style="background: var(--blue);"></div>
+    </div>
+
+    <div class="card">
+        <h2>🧠 AI 스케줄 생성</h2>
+        <textarea id="userInput" placeholder="공부할 과목과 중요도, 양을 편하게 적어주세요. 
+예: 식품학은 내용이 너무 많고 중요해서 3일 정도 집중해야 해. 생물학은 가볍게 복습만 하면 돼."></textarea>
+        <button onclick="getSchedule()">스케줄 짜달라고 하기</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function getSchedule() {
+            const input = document.getElementById('userInput').value;
+            const resDiv = document.getElementById('result');
+            resDiv.innerText = "AI가 학습 내용을 분석 중입니다...";
+
+            // B안: API 연결 방식 (실제 API 키를 발급받아 아래에 넣어야 작동합니다)
+            const API_KEY = "AQ.Ab8RN6KReQNM96tjBbbuTEC9QCBNQ4_smHYl6Z-mrHvQ_9fBMg"; 
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: "너는 이제부터 최고의 학습 플래너야. 사용자가 입력한 자연어 정보를 바탕으로 효율적인 공부 스케줄을 표 형태로 짜줘. 입력내용: " + input }] }]
+                    })
+                });
+                const data = await response.json();
+                resDiv.innerText = data.candidates[0].content.parts[0].text;
+            } catch (e) {
+                resDiv.innerText = "API 키가 설정되지 않았습니다. API 키를 발급받아 입력해주세요.";
+            }
+        }
+    </script>
+</body>
+</html>
