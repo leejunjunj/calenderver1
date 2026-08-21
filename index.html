@@ -154,7 +154,6 @@
     <div class="card">
         <h2 style="margin-top:0; font-size:16px; color:#831843;">🤖 Gemini AI 학습 플래너</h2>
         
-        <!-- API 키 설정 (입력 후 자동 숨김) -->
         <div class="key-input-box">
             <div id="keyInputSection">
                 <label style="color:#be185d; font-weight:bold; font-size:11px;">🔑 Gemini API Key 입력 (최초 1회)</label>
@@ -162,7 +161,7 @@
                     <input type="password" id="userApiKey" placeholder="API Key 입력 (AQ...)" style="flex:1;">
                     <button type="button" class="btn btn-purple" style="width:auto; padding:0 12px; margin:0; font-size:12px;" onclick="saveKeyAndHide()">저장</button>
                 </div>
-                <div style="font-size:10px; color:#9d174d; margin-top:4px;">* 입력하신 키는 사용자 브라우저에만 안전하게 저장됩니다.</div>
+                <div style="font-size:10px; color:#9d174d; margin-top:4px;">* 입력하신 키는 브라우저에 안전하게 저장됩니다.</div>
             </div>
             
             <div id="keySavedSection" style="display:none; justify-content:space-between; align-items:center;">
@@ -456,7 +455,6 @@
         }
     }
 
-    /* 구글 API 지원 모델 자동 검색 및 동적 호출 방식 */
     async function generateAiSchedule() {
         const resDiv = document.getElementById('aiResult');
         const btn = document.getElementById('aiGenBtn');
@@ -506,10 +504,10 @@
         btn.disabled = true;
         btn.innerText = "🧠 Gemini AI 분석 중...";
         resDiv.style.display = 'block';
-        resDiv.innerHTML = "💡 내 키에서 작동하는 최신 Gemini 모델 검색 및 일정 생성 중...";
+        resDiv.innerHTML = "💡 안정적인 모델로 학습 플랜을 생성하고 있습니다...";
 
         const promptText = `
-대학생을 위한 초정밀 맞춤형 학습 플래너를 생성해줘.
+대학생을 위한 맞춤형 학습 플래너를 생성해줘.
 
 [학습 기본 정보]
 - 과목명 및 범위: ${subName}
@@ -517,85 +515,79 @@
 - 학습 기간: ${startDateStr}부터 ${endDateStr}까지 (총 ${totalDays}일간)
 
 [비율 할당 지침 (50% / 35% / 15%)]
-전체 ${totalDays}일의 기간을 정확히 아래 3단계로 나누어 날짜별 계획을 작성할 것:
-1. 1단계 [개념 정리 (50%)] : 총 ${phase1Days}일간 진행
-2. 2단계 [심화문제 (35%)] : 총 ${phase2Days}일간 진행
-3. 3단계 [최종 총복습 (15%)] : 총 ${phase3Days}일간 진행
+전체 ${totalDays}일의 기간을 3단계로 나누어 날짜별 계획을 작성할 것:
+1. 1단계 [개념 정리 (50%)] : 총 ${phase1Days}일간
+2. 2단계 [심화문제 (35%)] : 총 ${phase2Days}일간
+3. 3단계 [최종 총복습 (15%)] : 총 ${phase3Days}일간
 
 [JSON 응답 규격]
-반드시 설명이나 마크다운 없이 아래 형식의 JSON 배열(Array)만 출력해줘:
+반드시 설명이나 마크다운 없이 순수 JSON 배열만 출력해줘:
 [
   {
     "dayNum": 1,
     "date": "${startDateStr}",
     "phase": "개념 정리 (50%)",
-    "title": "과목 주요 개념 요약",
-    "focusTip": "핵심 용어 위주로 먼저 암기하세요.",
-    "subtasks": ["개념 1장 읽기", "핵심 단어 노트 정리"]
+    "title": "핵심 개념 정리",
+    "focusTip": "주요 단어 위주 암기",
+    "subtasks": ["1장 읽기", "노트 정리"]
   }
 ]
 `;
 
-        try {
-            // 1단계: API 키로 사용 가능한 모델 목록을 구글 서버에서 동적 조회
-            let targetModels = [];
+        // 가장 안정적인 모델 순서로 직접 호출
+        const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+        let responseData = null;
+        let lastErrorMsg = '';
+
+        for (let model of modelsToTry) {
             try {
-                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
-                const listRes = await fetch(listUrl);
-                if (listRes.ok) {
-                    const listData = await listRes.json();
-                    if (listData.models && listData.models.length > 0) {
-                        targetModels = listData.models
-                            .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
-                            .map(m => m.name);
-                    }
-                }
-            } catch (e) {
-                console.log("모델 자동 조회 생략, 기본 모델 목록 사용");
-            }
-
-            // 목록 조회가 안 될 경우 백업 후보군
-            if (targetModels.length === 0) {
-                targetModels = ['models/gemini-1.5-flash', 'models/gemini-2.0-flash', 'models/gemini-1.5-pro'];
-            }
-
-            let responseData = null;
-            let success = false;
-            let lastErrorMsg = '';
-
-            // 2단계: 사용 가능한 모델로 순차 호출
-            for (let modelName of targetModels) {
-                const cleanModel = modelName.startsWith('models/') ? modelName : `models/${modelName}`;
-                const generateUrl = `https://generativelanguage.googleapis.com/v1beta/${cleanModel}:generateContent?key=${encodeURIComponent(key)}`;
-
-                const res = await fetch(generateUrl, {
+                const url = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){model}:generateContent?key=${encodeURIComponent(key)}`;
+                const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: promptText }] }],
-                        generationConfig: {
-                            temperature: 0.7,
-                            responseMimeType: "application/json"
-                        }
+                        contents: [{ parts: [{ text: promptText }] }]
                     })
                 });
 
                 const data = await res.json();
-                if (res.ok) {
+                if (res.ok && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
                     responseData = data;
-                    success = true;
                     break;
                 } else {
                     lastErrorMsg = data.error?.message || `HTTP ${res.status}`;
                 }
+            } catch (e) {
+                lastErrorMsg = e.message;
+            }
+        }
+
+        if (!responseData) {
+            resDiv.innerHTML = `
+            <div class="error-box">
+                <b>⚠️ API 호출 오류 발생</b><br>
+                상세 메시지: ${lastErrorMsg}<br><br>
+                <b>해결법:</b><br>
+                1. <a href="[https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)" target="_blank" style="color:#b91c1c; font-weight:bold; text-decoration:underline;">Google AI Studio</a> 접속<br>
+                2. <b>Create API Key</b> ➔ <b>Create API key in new project</b>(새 프로젝트에서 생성)로 키 재발급<br>
+                3. 상단 <b>[🔑 키 수정하기]</b> 버튼을 눌러 새 키를 등록해 주세요!
+            </div>`;
+            btn.disabled = false;
+            btn.innerText = "✨ 50%/35%/15% AI 스케줄 생성";
+            return;
+        }
+
+        try {
+            let rawText = responseData.candidates[0].content.parts[0].text;
+            
+            // 핵심 수정: 마크다운 기호 제거 및 순수 JSON 영역만 안전 추출
+            let cleanText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                cleanText = jsonMatch[0];
             }
 
-            if (!success) {
-                throw new Error(lastErrorMsg);
-            }
-
-            const rawText = responseData.candidates[0].content.parts[0].text;
-            const planList = JSON.parse(rawText);
+            const planList = JSON.parse(cleanText);
 
             aiGeneratedEvents = [];
             
@@ -641,12 +633,8 @@
             console.error(error);
             resDiv.innerHTML = `
             <div class="error-box">
-                <b>⚠️ 구글 API 응답 에러 발생</b><br>
-                상세 사유: ${error.message}<br><br>
-                <b>해결법:</b><br>
-                1. <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#b91c1c; font-weight:bold; text-decoration:underline;">Google AI Studio</a> 접속<br>
-                2. <b>Create API Key</b> ➔ <b>Create API key in new project</b>(새 프로젝트)로 키 재발급<br>
-                3. 상단 <b>[🔑 키 수정하기]</b>에 새로 만든 키를 넣어주시면 즉시 연결됩니다!
+                <b>⚠️ 응답 해석 오류</b><br>
+                AI 응답 파싱 중 일시적 오류가 발생했습니다. '스케줄 생성' 버튼을 한번 더 눌러주세요.
             </div>`;
             applyBtn.style.display = 'none';
         } finally {
