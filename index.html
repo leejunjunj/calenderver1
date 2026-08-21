@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>스마트 캘린더 & AI 학습 플래너</title>
+    <style>
+        :root {
+            --red: #ef4444; --orange: #f97316; --green: #22c55e;
+            --blue: #3b82f6; --navy: #1e3a8a; --pink: #ec4899; --purple: #a855f7;
+        }
+        * { box-sizing: border-box; touch-action: manipulation; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
+            margin: 0; padding: 12px; color: #1e293b; min-height: 100vh;
+        }
+        .container { max-width: 500px; margin: 0 auto; }
+        .card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 16px; border-radius: 16px; margin-bottom: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); overflow: hidden; }
+        
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .calendar-header button { background: #ffe4e6; border: none; padding: 8px 14px; border-radius: 8px; font-weight: bold; cursor: pointer; color: #be185d; }
+        .calendar-header h2 { margin: 0; font-size: 18px; color: #831843; }
+
+        .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-weight: bold; color: #9f1239; font-size: 12px; margin-bottom: 6px; }
+        .days-grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(75px, auto); gap: 2px; width: 100%; position: relative; }
+        .day-cell { 
+            background: #fff1f2; border-radius: 6px; padding: 4px; font-size: 11px; 
+            display: flex; flex-direction: column; cursor: pointer; border: 1px solid #fecdd3; 
+            min-height: 75px; position: relative;
+        }
+        .day-cell.selected { border-color: var(--pink); background: #fce7f3; }
+        .day-num { font-weight: bold; margin-bottom: 2px; color: #881337; z-index: 2; }
+
+        .event-spanning-bar {
+            position: absolute; height: 18px; background: var(--pink); color: white;
+            font-size: 10px; font-weight: 600; display: flex; align-items: center;
+            padding: 0 6px; border-radius: 4px; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; z-index: 5; box-shadow: 0 1px 3px rgba(0,0,0,0.15); cursor: pointer;
+        }
+        .bg-red { background: var(--red) !important; }
+        .bg-orange { background: var(--orange) !important; }
+        .bg-green { background: var(--green) !important; }
+        .bg-blue { background: var(--blue) !important; }
+        .bg-navy { background: var(--navy) !important; }
+        .bg-pink { background: var(--pink) !important; }
+        .bg-purple { background: var(--purple) !important; }
+
+        .input-group { margin-bottom: 10px; }
+        .input-group label { display: block; font-size: 11px; font-weight: bold; color: #9f1239; margin-bottom: 3px; }
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #fbcfe8; border-radius: 8px; font-size: 13px; background: #fff; }
+        .row { display: flex; gap: 6px; }
+        
+        .btn { background: var(--pink); color: white; border: none; padding: 10px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 4px; }
+        .btn-secondary { background: #db2777; margin-top: 6px; }
+        .btn-green { background: var(--green); }
+        .btn:disabled { background: #fda4af; cursor: not-allowed; }
+        
+        .timeline-item { background: #fff1f2; border-left: 4px solid var(--pink); padding: 8px; border-radius: 0 8px 8px 0; margin-bottom: 6px; font-size: 12px; }
+        .subject-card { background: #fff1f2; padding: 10px; border-radius: 8px; margin-bottom: 8px; position: relative; border: 1px solid #fce7f3; }
+        #aiResult { margin-top: 10px; background: #fff1f2; padding: 12px; border-radius: 8px; font-size: 12px; border: 1px solid #fbcfe8; line-height: 1.5; display: none; }
+        .ai-plan-item { background: white; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid var(--purple); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- 일정 추가 카드 -->
+    <div class="card">
+        <h4 style="margin:0 0 10px 0; font-size:15px; color:#831843;">➕ 새로운 일정 추가</h4>
+        <div class="input-group">
+            <label>할 일 이름</label>
+            <input type="text" id="eventTitle" placeholder="예: 부산 가는 날">
+        </div>
+        <div class="row">
+            <div class="input-group" style="flex:1;">
+                <label>시작일</label>
+                <input type="date" id="startDate">
+            </div>
+            <div class="input-group" style="flex:1;">
+                <label>종료일 (기간 설정)</label>
+                <input type="date" id="endDate">
+            </div>
+        </div>
+        <div class="row">
+            <div class="input-group" style="flex:1;">
+                <label>시간</label>
+                <input type="time" id="eventTime">
+            </div>
+            <div class="input-group" style="flex:1;">
+                <label>카테고리</label>
+                <select id="eventCategory">
+                    <option value="bg-red">중요한 일 (빨강)</option>
+                    <option value="bg-orange">일자리 (주황)</option>
+                    <option value="bg-green">친구 (초록)</option>
+                    <option value="bg-blue">학교 일 (파랑)</option>
+                    <option value="bg-navy">과제 (남색)</option>
+                    <option value="bg-pink">여행 (핑크)</option>
+                    <option value="bg-purple">기타 (보라)</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn" onclick="addEvent()">일정 추가하기</button>
+    </div>
+
+    <!-- 캘린더 카드 -->
+    <div class="card">
+        <div class="calendar-header">
+            <button onclick="changeMonth(-1)">◀</button>
+            <h2 id="monthYear">2026년 8월</h2>
+            <button onclick="changeMonth(1)">▶</button>
+        </div>
+        <div class="weekdays">
+            <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+        </div>
+        <div style="position: relative;">
+            <div class="days-grid" id="daysContainer"></div>
+            <div id="eventBarsContainer" style="position: absolute; top: 0; left: 0; width: 100%; pointer-events: none;"></div>
+        </div>
+    </div>
+
+    <!-- 타임라인 카드 -->
+    <div class="card">
+        <h3 id="selectedDateTitle" style="margin-top:0; font-size:15px; color:#831843;">날짜를 선택하세요</h3>
+        <div id="timelineContainer">
+            <p style="color: #9f1239; font-size: 12px; margin: 0; opacity: 0.7;">달력에서 날짜를 누르면 일정이 표시됩니다.</p>
+        </div>
+    </div>
+
+    <!-- AI 인공지능 학습 플래너 카드 -->
+    <div class="card">
+        <h2 style="margin-top:0; font-size:16px; color:#831843;">🤖 Gemini AI 분석 스케줄러</h2>
+
+        <div class="subject-card">
+            <div class="input-group">
+                <label>과목명 / 시험 범위</label>
+                <input type="text" id="aiSubName" placeholder="예: 식품 화학 1~5장">
+            </div>
+            <div class="row">
+                <div class="input-group" style="flex:1;">
+                    <label>난이도</label>
+                    <select id="aiSubDifficulty">
+                        <option value="쉬움">쉬움 (개념 위주)</option>
+                        <option value="보통" selected>보통 (일반 시험)</option>
+                        <option value="어려움">어려움 (암기+공식)</option>
+                        <option value="최상">최상 (시험 전 극강 집중)</option>
+                    </select>
+                </div>
+                <div class="input-group" style="flex:1;">
+                    <label>남은 기간 (일)</label>
+                    <input type="number" id="aiSubDays" value="5" min="1" max="30">
+                </div>
+            </div>
+            <div class="row">
+                <div class="input-group" style="flex:1;">
+                    <label>하루 공부 시간</label>
+                    <input type="text" id="aiSubHours" placeholder="예: 하루 2시간">
+                </div>
+                <div class="input-group" style="flex:1;">
+                    <label>시작일</label>
+                    <input type="date" id="aiStartDate">
+                </div>
+            </div>
+        </div>
+
+        <button class="btn" id="aiGenBtn" onclick="generateAiSchedule()">✨ AI 맞춤 스케줄 생성하기</button>
+
+        <div id="aiResult"></div>
+        <button class="btn btn-green" id="applyAiBtn" style="display:none; margin-top:8px;" onclick="applyAiToCalendar()">📅 이 스케줄 그대로 캘린더에 꽂기!</button>
+    </div>
+
+</div>
+
+<script>
+    // 전달해주신 키 코드 세팅
+    const API_KEY = "AQ.Ab8RN6IIC9fJyvtmE3x2CI2bA7maOQSYyjtou1CWt-CxHVupxw";
+
+    let events = [
+        { title: "부산 가는 날", start: "2026-08-14", end: "2026-08-17", time: "09:00", category: "bg-pink" }
+    ];
+
+    let today = new Date();
+    let currentYear = today.getFullYear();
+    let currentMonth = today.getMonth();
+    let selectedDateStr = "";
+    let aiGeneratedEvents = [];
+
+    function formatDate(d) {
+        let year = d.getFullYear();
+        let month = String(d.getMonth() + 1).padStart(2, '0');
+        let day = String(d.getDate()).padStart(2, '0');
+        return year + "-" + month + "-" + day;
+    }
+
+    window.onload = function() {
+        document.getElementById('aiStartDate').value = formatDate(new Date());
+        selectDate(formatDate(today));
+    };
+
+    function renderCalendar(year, month) {
+        const monthYearEl = document.getElementById('monthYear');
+        const daysContainer = document.getElementById('daysContainer');
+        const barsContainer = document.getElementById('eventBarsContainer');
+        
+        monthYearEl.innerText = year + "년 " + (month + 1) + "월";
+        daysContainer.innerHTML = '';
+        barsContainer.innerHTML = '';
+
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        const totalDays = new Date(year, month + 1, 0).getDate();
+
+        let totalCells = [];
+        for (let i = 0; i < firstDayIndex; i++) { totalCells.push(null); }
+        for (let day = 1; day <= totalDays; day++) {
+            let mStr = String(month + 1).padStart(2, '0');
+            let dStr = String(day).padStart(2, '0');
+            totalCells.push({ day: day, dateStr: year + "-" + mStr + "-" + dStr });
+        }
+
+        totalCells.forEach(function(cellInfo) {
+            const cell = document.createElement('div');
+            cell.className = 'day-cell';
+            if (cellInfo === null) {
+                cell.style.visibility = 'hidden';
+            } else {
+                if (cellInfo.dateStr === selectedDateStr) cell.classList.add('selected');
+                cell.innerHTML = '<span class="day-num">' + cellInfo.day + '</span>';
+                cell.onclick = function() { selectDate(cellInfo.dateStr); };
+            }
+            daysContainer.appendChild(cell);
+        });
+
+        setTimeout(function() { renderEventBars(year, month, firstDayIndex, totalDays); }, 10);
+    }
+
+    function renderEventBars(year, month, firstDayIndex, totalDays) {
+        const barsContainer = document.getElementById('eventBarsContainer');
+        const gridCells = document.querySelectorAll('.day-cell');
+        if (gridCells.length === 0) return;
+
+        events.forEach(function(ev, evIdx) {
+            let mStr = String(month + 1).padStart(2, '0');
+            let monthStartStr = year + "-" + mStr + "-01";
+            let monthEndStr = year + "-" + mStr + "-" + String(totalDays).padStart(2, '0');
+
+            if (ev.end >= monthStartStr && ev.start <= monthEndStr) {
+                let effStart = ev.start < monthStartStr ? monthStartStr : ev.start;
+                let effEnd = ev.end > monthEndStr ? monthEndStr : ev.end;
+
+                let startDay = parseInt(effStart.split('-')[2]);
+                let endDay = parseInt(effEnd.split('-')[2]);
+
+                let startIndex = firstDayIndex + startDay - 1;
+                let endIndex = firstDayIndex + endDay - 1;
+
+                let startRow = Math.floor(startIndex / 7);
+                let endRow = Math.floor(endIndex / 7);
+                let parentRect = document.getElementById('daysContainer').getBoundingClientRect();
+
+                for (let row = startRow; row <= endRow; row++) {
+                    let curStartIdx = Math.max(startIndex, row * 7);
+                    let curEndIdx = Math.min(endIndex, row * 7 + 6);
+
+                    let curStartCell = gridCells[curStartIdx];
+                    let curEndCell = gridCells[curEndIdx];
+
+                    if (curStartCell && curEndCell) {
+                        let cStartRect = curStartCell.getBoundingClientRect();
+                        let cEndRect = curEndCell.getBoundingClientRect();
+
+                        let left = cStartRect.left - parentRect.left + 2;
+                        let top = cStartRect.top - parentRect.top + 22 + ((evIdx % 3) * 19);
+                        let width = (cEndRect.right - cStartRect.left) - 4;
+
+                        const bar = document.createElement('div');
+                        bar.className = 'event-spanning-bar ' + ev.category;
+                        bar.style.left = left + 'px';
+                        bar.style.top = top + 'px';
+                        bar.style.width = width + 'px';
+                        bar.innerText = ev.title;
+                        bar.onclick = function(e) { e.stopPropagation(); selectDate(ev.start); };
+                        barsContainer.appendChild(bar);
+                    }
+                }
+            }
+        });
+    }
+
+    function changeMonth(dir) {
+        currentMonth += dir;
+        if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+        else if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+        renderCalendar(currentYear, currentMonth);
+    }
+
+    function selectDate(dateStr) {
+        selectedDateStr = dateStr;
+        renderCalendar(currentYear, currentMonth);
+
+        const titleEl = document.getElementById('selectedDateTitle');
+        const timelineEl = document.getElementById('timelineContainer');
+        titleEl.innerText = dateStr + " 일정 타임라인";
+
+        let dayEvents = events.filter(function(ev) { return dateStr >= ev.start && dateStr <= ev.end; });
+        
+        if (dayEvents.length === 0) {
+            timelineEl.innerHTML = '<p style="color: #9f1239; font-size: 12px; margin: 0; opacity: 0.7;">등록된 일정이 없습니다.</p>';
+        } else {
+            timelineEl.innerHTML = dayEvents.map(function(ev) {
+                return '<div class="timeline-item"><strong>' + (ev.time || '하루종일') + '</strong> - ' + ev.title + ' <span style="font-size:10px; color:#be185d;">(' + ev.start + '~' + ev.end + ')</span></div>';
+            }).join('');
+        }
+
+        document.getElementById('startDate').value = dateStr;
+        document.getElementById('endDate').value = dateStr;
+    }
+
+    function addEvent() {
+        let title = document.getElementById('eventTitle').value;
+        let start = document.getElementById('startDate').value;
+        let end = document.getElementById('endDate').value || start;
+        let time = document.getElementById('eventTime').value;
+        let category = document.getElementById('eventCategory').value;
+
+        if (!title || !start) { alert("할 일 이름과 시작일을 입력해주세요!"); return; }
+
+        events.push({ title: title, start: start, end: end, time: time, category: category });
+        renderCalendar(currentYear, currentMonth);
+        if(selectedDateStr) selectDate(selectedDateStr);
+
+        document.getElementById('eventTitle').value = '';
+        alert("일정이 추가되었습니다!");
+    }
+
+    async function generateAiSchedule() {
+        const subName = document.getElementById('aiSubName').value.trim();
+        const difficulty = document.getElementById('aiSubDifficulty').value;
+        const days = parseInt(document.getElementById('aiSubDays').value) || 3;
+        const hours = document.getElementById('aiSubHours').value || "2시간";
+        const startDateStr = document.getElementById('aiStartDate').value || formatDate(new Date());
+
+        if (!subName) {
+            alert("과목명/시험 범위를 입력해주세요!");
+            return;
+        }
+
+        const btn = document.getElementById('aiGenBtn');
+        const resDiv = document.getElementById('aiResult');
+        const applyBtn = document.getElementById('applyAiBtn');
+
+        btn.disabled = true;
+        btn.innerText = "🧠 AI가 맞춤 플랜을 정밀하게 설계 중...";
+        resDiv.style.display = 'block';
+        resDiv.innerText = "인공지능이 과목 난이도와 인지 부하를 분석하고 있습니다. 잠시만 기다려주세요...";
+
+        const prompt = `
+너는 학습 심리학 및 스케줄링 전문 AI 플래너야. 
+아래 과목 정보를 바탕으로 ${days}일간의 일자별 상세 공부 스케줄을 작성해줘.
+
+- 과목/범위: ${subName}
+- 난이도: ${difficulty}
+- 남은 기간: ${days}일 (시작일: ${startDateStr})
+- 하루 가능 시간: ${hours}
+
+[요구사항]
+1. 시작일(${startDateStr})부터 연속 ${days}일 동안의 일자별 스케줄을 만들어.
+2. 난이도와 학습 효율을 극대화하도록 [개념이해 -> 심화/문제풀이 -> 최종 복습] 순으로 인지적 배분을 정밀하게 해.
+3. 반드시 아래 JSON 배열 형식으로만 응답해줘. 다른 말은 절대 하지마.
+
+JSON 응답 형식 예시:
+[
+  {
+    "date": "YYYY-MM-DD",
+    "dayNum": 1,
+    "title": "[식품학] 1장 핵심 개념 및 주요 용어 암기",
+    "detail": "지질 구조 파악 및 필수 개념 노트 정리 (2시간)",
+    "category": "bg-navy"
+  }
+]
+`;
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }]
+                })
+            });
+
+            const data = await response.json();
+            let responseText = data.candidates[0].content.parts[0].text;
+
+            responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+            const planList = JSON.parse(responseText);
+
+            aiGeneratedEvents = [];
+            let html = `<strong>🤖 AI가 완성한 [${subName}] ${days}일 플랜:</strong><br><br>`;
+
+            planList.forEach(item => {
+                html += `
+                <div class="ai-plan-item">
+                    <strong>${item.date} (Day ${item.dayNum})</strong><br>
+                    🎯 <b>${item.title}</b><br>
+                    <span style="color:#64748b; font-size:11px;">${item.detail}</span>
+                </div>`;
+
+                aiGeneratedEvents.push({
+                    title: item.title,
+                    start: item.date,
+                    end: item.date,
+                    time: "10:00",
+                    category: item.category || "bg-navy"
+                });
+            });
+
+            resDiv.innerHTML = html;
+            applyBtn.style.display = 'block';
+
+        } catch (error) {
+            console.error(error);
+            resDiv.innerHTML = `<span style="color:red;">⚠️ 오류가 발생했습니다. 잠시 후 다시 시도해보세요.</span>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "✨ AI 맞춤 스케줄 생성하기";
+        }
+    }
+
+    function applyAiToCalendar() {
+        if (aiGeneratedEvents.length === 0) return;
+
+        events = events.concat(aiGeneratedEvents);
+        renderCalendar(currentYear, currentMonth);
+        if(selectedDateStr) selectDate(selectedDateStr);
+
+        alert(`🎉 총 ${aiGeneratedEvents.length}일간의 AI 학습 스케줄이 캘린더에 성공적으로 등록되었습니다!`);
+        document.getElementById('aiResult').style.display = 'none';
+        document.getElementById('applyAiBtn').style.display = 'none';
+    }
+</script>
+</body>
+</html>
