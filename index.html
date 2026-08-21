@@ -154,12 +154,20 @@
     <div class="card">
         <h2 style="margin-top:0; font-size:16px; color:#831843;">🤖 Gemini AI 학습 플래너</h2>
         
-        <!-- API 키 입력 상자 -->
+        <!-- API 키 설정 (입력 완료 시 상자 숨김) -->
         <div class="key-input-box">
-            <div class="input-group" style="margin-bottom:0;">
-                <label style="color:#be185d;">🔑 Gemini API Key 설정 (최초 1회 설정)</label>
-                <input type="password" id="userApiKey" placeholder="발급받으신 API Key 입력 (AQ...)" style="margin-top:4px;" onchange="saveKeyToStorage()">
-                <div style="font-size:10px; color:#9d174d; margin-top:4px;">* 키는 서버에 저장되지 않고 사용자 기기에만 안전하게 보관됩니다.</div>
+            <div id="keyInputSection">
+                <label style="color:#be185d; font-weight:bold; font-size:11px;">🔑 Gemini API Key 입력 (최초 1회)</label>
+                <div class="row" style="margin-top:4px;">
+                    <input type="password" id="userApiKey" placeholder="API Key 입력 (AQ...)" style="flex:1;">
+                    <button type="button" class="btn btn-purple" style="width:auto; padding:0 12px; margin:0; font-size:12px;" onclick="saveKeyAndHide()">저장</button>
+                </div>
+                <div style="font-size:10px; color:#9d174d; margin-top:4px;">* 입력하신 키는 사용자 기기(브라우저)에만 안전하게 보관됩니다.</div>
+            </div>
+            
+            <div id="keySavedSection" style="display:none; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:#15803d; font-weight:bold;">✅ API 키가 연동되었습니다.</span>
+                <button type="button" onclick="showKeyInput()" style="background:none; border:none; color:#be185d; font-size:11px; text-decoration:underline; cursor:pointer;">🔑 키 수정하기</button>
             </div>
         </div>
 
@@ -224,18 +232,38 @@
         futureDate.setDate(today.getDate() + 4);
         document.getElementById('aiEndDate').value = formatDate(futureDate);
 
-        // 저장된 API 키 불러오기
-        const savedKey = localStorage.getItem('gemini_user_key');
-        if (savedKey) {
-            document.getElementById('userApiKey').value = savedKey;
-        }
+        checkSavedKey();
     };
 
-    function saveKeyToStorage() {
-        const key = document.getElementById('userApiKey').value.trim();
-        if (key) {
-            localStorage.setItem('gemini_user_key', key);
+    function checkSavedKey() {
+        const savedKey = localStorage.getItem('gemini_user_key');
+        const inputSection = document.getElementById('keyInputSection');
+        const savedSection = document.getElementById('keySavedSection');
+        
+        if (savedKey && savedKey.trim() !== '') {
+            document.getElementById('userApiKey').value = savedKey;
+            inputSection.style.display = 'none';
+            savedSection.style.display = 'flex';
+        } else {
+            inputSection.style.display = 'block';
+            savedSection.style.display = 'none';
         }
+    }
+
+    function saveKeyAndHide() {
+        const key = document.getElementById('userApiKey').value.trim();
+        if (!key) {
+            alert('API 키를 입력해 주세요!');
+            return;
+        }
+        localStorage.setItem('gemini_user_key', key);
+        checkSavedKey();
+        alert('API 키가 저장되었습니다!');
+    }
+
+    function showKeyInput() {
+        document.getElementById('keyInputSection').style.display = 'block';
+        document.getElementById('keySavedSection').style.display = 'none';
     }
 
     function renderCalendar(year, month) {
@@ -428,18 +456,18 @@
         }
     }
 
-    /* Gemini AI 호출 기능 */
+    /* Gemini AI 호출 기능 (다중 모델 자동 백업 시도 방식) */
     async function generateAiSchedule() {
         const resDiv = document.getElementById('aiResult');
         const btn = document.getElementById('aiGenBtn');
         const applyBtn = document.getElementById('applyAiBtn');
 
-        const key = document.getElementById('userApiKey').value.trim();
-        saveKeyToStorage();
+        let key = localStorage.getItem('gemini_user_key') || document.getElementById('userApiKey').value.trim();
 
         if (!key) {
             resDiv.style.display = 'block';
-            resDiv.innerHTML = `<div class="error-box"><b>⚠️ 상단 상자에 Gemini API Key를 입력해주세요!</b></div>`;
+            resDiv.innerHTML = `<div class="error-box"><b>⚠️ API Key가 설정되지 않았습니다.</b><br>상단의 API 키 입력칸에 키를 입력하고 저장해 주세요!</div>`;
+            showKeyInput();
             return;
         }
 
@@ -508,83 +536,107 @@
 ]
 `;
 
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`;
-            
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: promptText }] }],
-                    generationConfig: {
-                        temperature: 0.7,
-                        responseMimeType: "application/json"
-                    }
-                })
-            });
+        // 404 방지를 위해 시도할 모델 이름 후보들
+        const modelsToTry = [
+            'gemini-1.5-flash',
+            'gemini-2.0-flash',
+            'gemini-1.5-pro'
+        ];
 
-            const responseData = await response.json();
+        let success = false;
+        let lastErrorMsg = '';
 
-            if (!response.ok) {
-                throw new Error(`[오류 ${response.status}] ${responseData.error?.message || 'API 키가 유효하지 않습니다.'}`);
-            }
-
-            const rawText = responseData.candidates[0].content.parts[0].text;
-            const planList = JSON.parse(rawText);
-
-            aiGeneratedEvents = [];
-            
-            let html = `
-            <div class="ai-summary-badge">
-                <strong>🎯 [${subName}] ${totalDays}일 플랜 생성 완료!</strong><br>
-                • 난이도: ${importance}<br>
-                • 비율 적용: 개념(${phase1Days}일) ➔ 심화(${phase2Days}일) ➔ 복습(${phase3Days}일)
-            </div>`;
-
-            planList.forEach(item => {
-                let subtasksHtml = (item.subtasks || []).map(task => `
-                    <li>
-                        <input type="checkbox">
-                        <span>${task}</span>
-                    </li>
-                `).join('');
+        for (let modelName of modelsToTry) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(key)}`;
                 
-                html += `
-                <div class="ai-plan-card">
-                    <span class="ai-plan-phase">${item.phase || '학습 단계'}</span>
-                    <div style="font-size:13px; font-weight:bold; color:#0f172a; margin:3px 0 5px 0;">
-                        ${item.date} (Day ${item.dayNum}) : ${item.title}
-                    </div>
-                    ${item.focusTip ? `<div class="ai-focus-tip">💡 Tip: ${item.focusTip}</div>` : ''}
-                    <ul class="ai-subtask-list">
-                        ${subtasksHtml}
-                    </ul>
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptText }] }],
+                        generationConfig: {
+                            temperature: 0.7,
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+
+                const responseData = await response.json();
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        lastErrorMsg = `404 Not Found (${modelName})`;
+                        continue; // 다음 모델 시도
+                    }
+                    throw new Error(`[오류 ${response.status}] ${responseData.error?.message || 'API 키 인증 실패'}`);
+                }
+
+                const rawText = responseData.candidates[0].content.parts[0].text;
+                const planList = JSON.parse(rawText);
+
+                aiGeneratedEvents = [];
+                
+                let html = `
+                <div class="ai-summary-badge">
+                    <strong>🎯 [${subName}] ${totalDays}일 플랜 생성 완료!</strong><br>
+                    • 난이도: ${importance}<br>
+                    • 비율 적용: 개념(${phase1Days}일) ➔ 심화(${phase2Days}일) ➔ 복습(${phase3Days}일)
                 </div>`;
 
-                aiGeneratedEvents.push({
-                    title: `[공부] ${item.title}`,
-                    start: item.date,
-                    end: item.date,
-                    category: "bg-navy"
+                planList.forEach(item => {
+                    let subtasksHtml = (item.subtasks || []).map(task => `
+                        <li>
+                            <input type="checkbox">
+                            <span>${task}</span>
+                        </li>
+                    `).join('');
+                    
+                    html += `
+                    <div class="ai-plan-card">
+                        <span class="ai-plan-phase">${item.phase || '학습 단계'}</span>
+                        <div style="font-size:13px; font-weight:bold; color:#0f172a; margin:3px 0 5px 0;">
+                            ${item.date} (Day ${item.dayNum}) : ${item.title}
+                        </div>
+                        ${item.focusTip ? `<div class="ai-focus-tip">💡 Tip: ${item.focusTip}</div>` : ''}
+                        <ul class="ai-subtask-list">
+                            ${subtasksHtml}
+                        </ul>
+                    </div>`;
+
+                    aiGeneratedEvents.push({
+                        title: `[공부] ${item.title}`,
+                        start: item.date,
+                        end: item.date,
+                        category: "bg-navy"
+                    });
                 });
-            });
 
-            resDiv.innerHTML = html;
-            applyBtn.style.display = 'block';
+                resDiv.innerHTML = html;
+                applyBtn.style.display = 'block';
+                success = true;
+                break; // 성공 시 반복문 탈출
 
-        } catch (error) {
-            console.error(error);
+            } catch (err) {
+                lastErrorMsg = err.message;
+            }
+        }
+
+        if (!success) {
             resDiv.innerHTML = `
             <div class="error-box">
-                <b>⚠️ Gemini AI 호출 에러</b><br>
-                ${error.message}<br><br>
-                입력하신 API 키가 정확한지 다시 한번 확인해 주세요.
+                <b>⚠️ 404 에러가 계속 발생할 때 해결 방법 (프로젝트 설정)</b><br><br>
+                현재 사용 중이신 프로젝트에 구글 AI API가 비활성화된 상태입니다.<br>
+                <b>1분 안에 해결책:</b><br>
+                1. <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:#b91c1c; font-weight:bold; text-decoration:underline;">Google AI Studio</a> 페이지로 이동합니다.<br>
+                2. <b>'Create API Key'</b> 버튼 클릭 ➔ <b>'Create API key in new project'</b> (새 프로젝트에서 만들기) 선택!<br>
+                3. 새로 생성된 키를 상단의 [🔑 키 수정하기] 버튼을 눌러 입력해 주시면 즉시 해결됩니다!
             </div>`;
             applyBtn.style.display = 'none';
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "✨ 50%/35%/15% AI 스케줄 생성";
         }
+
+        btn.disabled = false;
+        btn.innerText = "✨ 50%/35%/15% AI 스케줄 생성";
     }
 
     function applyAiToCalendar() {
